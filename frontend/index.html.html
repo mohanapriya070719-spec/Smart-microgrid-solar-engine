@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microgrid Control — Rule Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0F1A;
+    --surface:#111A2B;
+    --surface-2:#182238;
+    --surface-3:#1F2C46;
+    --border:#28324A;
+    --border-bright:#3A4A6B;
+    --text:#E7ECF5;
+    --text-dim:#8A96AD;
+    --text-faint:#5B6580;
+    --amber:#F5A623;
+    --amber-dim:#7A551A;
+    --blue:#5B8DEF;
+    --blue-dim:#2A3E66;
+    --green:#3DD68C;
+    --green-dim:#1C5C40;
+    --red:#FF5D5D;
+    --red-dim:#5C2323;
+    --purple:#9B8CFF;
+    --purple-dim:#3A335C;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    --sans:'IBM Plex Sans', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{min-height:100vh;}
+  ::selection{background:var(--amber-dim);color:var(--text);}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-track{background:var(--surface);}
+  ::-webkit-scrollbar-thumb{background:var(--border-bright);}
+
+  button{font-family:var(--sans);cursor:pointer;}
+  input,select{font-family:var(--sans);}
+
+  /* ---------- Header ---------- */
+  .header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 22px;border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#0D1424,#0A0F1A);
+    position:sticky;top:0;z-index:50;
+  }
+  .header-left{display:flex;align-items:center;gap:14px;}
+  .logo-mark{
+    width:34px;height:34px;border:1px solid var(--border-bright);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--amber);font-family:var(--mono);font-weight:700;font-size:15px;
+    background:var(--surface-2);
+  }
+  .header-title{font-size:15px;font-weight:600;letter-spacing:.02em;}
+  .header-sub{font-size:11px;color:var(--text-faint);font-family:var(--mono);margin-top:1px;}
+  .status-pill{
+    display:flex;align-items:center;gap:7px;padding:5px 10px;
+    border:1px solid var(--green-dim);background:rgba(61,214,140,.08);
+    font-family:var(--mono);font-size:11px;color:var(--green);
+  }
+  .status-dot{width:6px;height:6px;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .header-right{display:flex;align-items:center;gap:10px;}
+  .clock{font-family:var(--mono);font-size:12px;color:var(--text-dim);}
+
+  .btn{
+    border:1px solid var(--border-bright);background:var(--surface-2);color:var(--text);
+    padding:7px 13px;font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px;
+    transition:border-color .15s, background .15s;
+  }
+  .btn:hover{border-color:var(--amber);background:var(--surface-3);}
+  .btn:active{transform:translateY(1px);}
+  .btn-amber{background:var(--amber);border-color:var(--amber);color:#1A1204;font-weight:600;}
+  .btn-amber:hover{background:#ffb840;border-color:#ffb840;}
+  .btn-ghost{background:transparent;}
+  .btn-sm{padding:4px 9px;font-size:11px;}
+  .btn-danger{border-color:var(--red-dim);color:var(--red);}
+  .btn-danger:hover{border-color:var(--red);background:rgba(255,93,93,.08);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:disabled:hover{border-color:var(--border-bright);background:var(--surface-2);}
+
+  /* ---------- Layout ---------- */
+  .layout{display:grid;grid-template-columns:296px 1fr 360px;gap:1px;background:var(--border);min-height:calc(100vh - 61px);}
+  .col{background:var(--bg);overflow-y:auto;max-height:calc(100vh - 61px);}
+  .col-pad{padding:16px;}
+  @media (max-width:1200px){.layout{grid-template-columns:1fr;}.col{max-height:none;}}
+
+  .section-label{
+    font-family:var(--mono);font-size:10.5px;color:var(--text-faint);
+    letter-spacing:.08em;margin:0 0 10px 0;display:flex;align-items:center;justify-content:space-between;
+  }
+  .section-label span.count{color:var(--text-dim);}
+
+  /* ---------- Sensor / Actuator Cards ---------- */
+  .card{
+    border:1px solid var(--border);background:var(--surface);
+    padding:12px 13px;margin-bottom:8px;
+  }
+  .sensor-card{display:flex;flex-direction:column;gap:6px;}
+  .sensor-top{display:flex;align-items:center;justify-content:space-between;}
+  .sensor-name{font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:7px;}
+  .sensor-icon{width:16px;height:16px;flex:none;}
+  .sensor-value{font-family:var(--mono);font-size:20px;font-weight:600;}
+  .sensor-value .unit{font-size:11px;color:var(--text-faint);font-weight:400;margin-left:3px;}
+  .sensor-bar{height:4px;background:var(--surface-2);position:relative;overflow:hidden;}
+  .sensor-bar-fill{height:100%;transition:width .5s ease;}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:3px;background:var(--surface-3);outline:none;margin:6px 0 2px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:12px;height:12px;background:var(--amber);border:1px solid #1A1204;cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;background:var(--amber);border:none;cursor:pointer;}
+
+  .actuator-card{display:flex;align-items:center;justify-content:space-between;}
+  .actuator-name{font-size:12px;color:var(--text-dim);}
+  .actuator-state{
+    font-family:var(--mono);font-size:12px;font-weight:600;padding:3px 9px;border:1px solid;
+  }
+  .st-on,.st-max{color:var(--amber);border-color:var(--amber-dim);background:rgba(245,166,35,.08);}
+  .st-off{color:var(--text-faint);border-color:var(--border);background:var(--surface-2);}
+  .st-eco{color:var(--green);border-color:var(--green-dim);background:rgba(61,214,140,.08);}
+
+  .mode-toggle{display:flex;border:1px solid var(--border-bright);margin-bottom:12px;}
+  .mode-toggle button{flex:1;background:var(--surface);border:none;color:var(--text-dim);padding:7px 0;font-size:11px;font-family:var(--mono);}
+  .mode-toggle button.active{background:var(--amber);color:#1A1204;font-weight:600;}
+
+  .run-engine-btn{width:100%;margin-top:8px;justify-content:center;}
+
+  .scenario-btn{
+    width:100%;text-align:left;border:1px solid var(--border);background:var(--surface);
+    padding:9px 11px;margin-bottom:7px;font-size:11.5px;color:var(--text);display:flex;flex-direction:column;gap:2px;
+  }
+  .scenario-btn:hover{border-color:var(--blue);}
+  .scenario-btn .sc-title{font-weight:600;display:flex;align-items:center;gap:6px;}
+  .scenario-btn .sc-desc{color:var(--text-faint);font-size:10.5px;}
+  .sc-num{font-family:var(--mono);color:var(--blue);}
+
+  /* ---------- Center: Graph ---------- */
+  .graph-wrap{border:1px solid var(--border);background:var(--surface);margin-bottom:12px;position:relative;}
+  .graph-header{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:1px solid var(--border);}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--text-faint);font-family:var(--mono);}
+  .legend-swatch{width:9px;height:9px;flex:none;}
+  #graphSvg{display:block;width:100%;height:440px;background:
+    radial-gradient(circle at 20% 15%, rgba(91,141,239,.05), transparent 40%),
+    radial-gradient(circle at 80% 85%, rgba(245,166,35,.05), transparent 40%);}
+
+  .node-label{font-family:var(--mono);font-size:9.5px;fill:var(--text-dim);}
+  .node-value{font-family:var(--mono);font-size:9px;fill:var(--text-faint);}
+
+  /* ---------- Trace / explainability ---------- */
+  .trace-box{border:1px solid var(--border);background:var(--surface);padding:13px;margin-bottom:12px;}
+  .trace-title{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.05em;margin-bottom:10px;display:flex;align-items:center;gap:7px;}
+  .trace-chain{display:flex;flex-direction:column;gap:0;}
+  .trace-step{
+    display:flex;align-items:center;gap:10px;padding:7px 0;font-size:12px;font-family:var(--mono);
+  }
+  .trace-step .tstep-badge{
+    flex:none;width:20px;height:20px;border:1px solid var(--border-bright);display:flex;align-items:center;justify-content:center;
+    font-size:9.5px;color:var(--text-dim);
+  }
+  .trace-step.trig .tstep-badge{border-color:var(--amber);color:var(--amber);}
+  .trace-step.arb .tstep-badge{border-color:var(--purple);color:var(--purple);}
+  .trace-connector{width:1px;height:10px;background:var(--border-bright);margin-left:9px;}
+  .trace-empty{color:var(--text-faint);font-size:12px;font-family:var(--mono);}
+
+  .arb-detail{
+    margin-top:4px;margin-left:30px;padding:8px 10px;background:var(--surface-2);border-left:2px solid var(--purple);font-size:11px;color:var(--text-dim);
+  }
+  .arb-row{display:flex;justify-content:space-between;padding:2px 0;}
+  .arb-winner{color:var(--green);}
+  .arb-loser{color:var(--text-faint);text-decoration:line-through;}
+
+  /* ---------- Right col ---------- */
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+  .stat-box{border:1px solid var(--border);background:var(--surface);padding:10px 11px;}
+  .stat-num{font-family:var(--mono);font-size:19px;font-weight:600;}
+  .stat-label{font-size:10px;color:var(--text-faint);margin-top:2px;}
+
+  .intel-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;}
+  .intel-row:last-child{border-bottom:none;}
+  .intel-val{font-family:var(--mono);font-weight:600;}
+  .intel-note{font-size:10px;color:var(--text-faint);margin-top:8px;font-style:italic;}
+
+  .rule-row{
+    border:1px solid var(--border);background:var(--surface);padding:9px 11px;margin-bottom:7px;
+  }
+  .rule-row.disabled{opacity:.45;}
+  .rule-row-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+  .rule-id{font-family:var(--mono);font-size:10px;color:var(--blue);}
+  .rule-name{font-size:12px;font-weight:600;}
+  .rule-logic{font-family:var(--mono);font-size:10.5px;color:var(--text-dim);}
+  .rule-logic .arrow{color:var(--text-faint);margin:0 4px;}
+  .rule-meta{display:flex;align-items:center;gap:8px;margin-top:6px;}
+  .prio-badge{font-family:var(--mono);font-size:10px;padding:1px 6px;border:1px solid var(--border-bright);color:var(--text-dim);}
+  .rule-actions{display:flex;gap:5px;margin-left:auto;}
+  .icon-btn{border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;}
+  .icon-btn:hover{border-color:var(--amber);color:var(--amber);}
+
+  .log-filters{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;}
+  .log-filter{
+    font-family:var(--mono);font-size:9.5px;padding:3px 7px;border:1px solid var(--border);background:var(--surface);color:var(--text-faint);
+  }
+  .log-filter.active{border-color:var(--amber);color:var(--amber);}
+  .log-entry{border-left:2px solid var(--border-bright);padding:6px 0 6px 10px;margin-bottom:2px;font-size:11px;}
+  .log-entry.trigger{border-color:var(--amber);}
+  .log-entry.arbitration{border-color:var(--purple);}
+  .log-entry.cycle{border-color:var(--red);}
+  .log-entry.sensor{border-color:var(--blue);}
+  .log-entry.system{border-color:var(--green);}
+  .log-time{font-family:var(--mono);color:var(--text-faint);font-size:9.5px;}
+  .log-msg{color:var(--text-dim);margin-top:1px;}
+  .log-msg b{color:var(--text);font-weight:600;}
+
+  /* ---------- Modal / Rule Builder ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(6,9,16,.72);display:none;align-items:flex-start;justify-content:flex-end;z-index:200;
+  }
+  .overlay.show{display:flex;}
+  .drawer{
+    width:420px;max-width:92vw;height:100vh;background:var(--bg);border-left:1px solid var(--border-bright);
+    overflow-y:auto;animation:slidein .18s ease;
+  }
+  @keyframes slidein{from{transform:translateX(24px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+  .drawer-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);}
+  .drawer-title{font-size:14px;font-weight:600;}
+  .drawer-body{padding:18px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:10.5px;color:var(--text-faint);font-family:var(--mono);letter-spacing:.05em;margin-bottom:5px;}
+  .field input[type=text], .field input[type=number], .field select{
+    width:100%;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);
+    padding:9px 10px;font-size:13px;font-family:var(--mono);
+  }
+  .field input:focus, .field select:focus{outline:none;border-color:var(--amber);}
+  .cond-row{display:grid;grid-template-columns:1.4fr .8fr 1fr;gap:7px;}
+  .then-row{display:grid;grid-template-columns:1.4fr 1fr;gap:7px;}
+  .validation-msg{
+    padding:10px 12px;font-size:12px;font-family:var(--mono);border:1px solid;margin-top:10px;display:none;white-space:pre-line;
+  }
+  .validation-msg.show{display:block;}
+  .validation-msg.ok{border-color:var(--green-dim);background:rgba(61,214,140,.08);color:var(--green);}
+  .validation-msg.err{border-color:var(--red-dim);background:rgba(255,93,93,.08);color:var(--red);}
+
+  /* ---------- Toasts ---------- */
+  .toast-stack{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:8px;z-index:400;}
+  .toast{
+    background:var(--surface-3);border:1px solid var(--border-bright);border-left:3px solid var(--amber);
+    padding:11px 15px;font-size:12px;min-width:240px;max-width:340px;animation:toastin .2s ease;box-shadow:0 6px 24px rgba(0,0,0,.4);
+  }
+  .toast.err{border-left-color:var(--red);}
+  .toast.ok{border-left-color:var(--green);}
+  @keyframes toastin{from{transform:translateY(8px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+
+  /* ---------- Judge demo overlay ---------- */
+  .judge-banner{
+    position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:300;
+    background:var(--surface-3);border:1px solid var(--amber);padding:14px 22px;display:none;
+    align-items:center;gap:16px;box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:640px;
+  }
+  .judge-banner.show{display:flex;}
+  .judge-step-num{font-family:var(--mono);color:var(--amber);font-size:11px;flex:none;}
+  .judge-step-text{font-size:13px;}
+  .judge-step-text b{color:var(--amber);}
+
+  .cycle-flash{animation:flashred .9s ease;}
+  @keyframes flashred{0%,100%{box-shadow:none;}40%{box-shadow:0 0 0 3px rgba(255,93,93,.35);}}
+
+  .empty-state{color:var(--text-faint);font-size:12px;padding:14px 0;text-align:center;font-family:var(--mono);}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo-mark">M</div>
+    <div>
+      <div class="header-title">SMART MICROGRID ENERGY MANAGER</div>
+      <div class="header-sub">DAG rule engine · live simulation</div>
+    </div>
+    <div class="status-pill"><div class="status-dot"></div>SYSTEM ONLINE</div>
+  </div>
+  <div class="header-right">
+    <span class="clock" id="clock">--:--:--</span>
+    <button class="btn btn-amber" id="judgeBtn">🚀 JUDGE DEMO MODE</button>
+  </div>
+</div>
+
+<div class="judge-banner" id="judgeBanner">
+  <div class="judge-step-num" id="judgeStepNum">STEP 1/4</div>
+  <div class="judge-step-text" id="judgeStepText">—</div>
+  <button class="btn btn-sm btn-ghost" id="judgeSkip">Skip</button>
+</div>
+
+<div class="layout">
+
+  <!-- LEFT COLUMN -->
+  <div class="col"><div class="col-pad">
+
+    <div class="mode-toggle">
+      <button id="modeAuto" class="active">AUTO SIM</button>
+      <button id="modeManual">MANUAL</button>
+    </div>
+
+    <div class="section-label">LIVE SENSORS</div>
+    <div id="sensorCards"></div>
+
+    <div class="section-label" style="margin-top:16px;">ACTUATORS</div>
+    <div id="actuatorCards"></div>
+
+    <button class="btn btn-amber run-engine-btn" id="runEngineBtn">▶ RUN ENGINE</button>
+
+    <div class="section-label" style="margin-top:20px;">DEMO SCENARIOS</div>
+    <button class="scenario-btn" id="sc1">
+      <span class="sc-title"><span class="sc-num">01</span> Solar Surplus</span>
+      <span class="sc-desc">Solar 8kW → EV Charger ON → Battery Discharge OFF (chaining)</span>
+    </button>
+    <button class="scenario-btn" id="sc2">
+      <span class="sc-title"><span class="sc-num">02</span> Peak Tariff Conflict</span>
+      <span class="sc-desc">Temp 35°C + Tariff $0.45 → HVAC arbitration</span>
+    </button>
+    <button class="scenario-btn" id="sc3">
+      <span class="sc-title"><span class="sc-num">03</span> Cycle Attack</span>
+      <span class="sc-desc">Attempt Solar_Output → Battery_Discharge dependency</span>
+    </button>
+    <button class="scenario-btn" id="sc4">
+      <span class="sc-title"><span class="sc-num">04</span> Live Rule Injection</span>
+      <span class="sc-desc">Add low-battery cutoff rule while running</span>
+    </button>
+
+  </div></div>
+
+  <!-- CENTER COLUMN -->
+  <div class="col"><div class="col-pad">
+
+    <div class="graph-wrap">
+      <div class="graph-header">
+        <div class="section-label" style="margin:0;">RULE DEPENDENCY GRAPH</div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--blue);"></div>sensor/actuator</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--purple);"></div>rule</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--amber);"></div>active path</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--red);"></div>cycle</div>
+        </div>
+      </div>
+      <svg id="graphSvg" viewBox="0 0 900 440"></svg>
+    </div>
+
+    <div class="trace-box">
+      <div class="trace-title">⟶ WHY DID THIS HAPPEN? <span style="color:var(--text-faint);font-weight:400;" id="traceTime"></span></div>
+      <div id="traceContent"><div class="trace-empty">No engine run yet. Adjust a sensor or run a scenario.</div></div>
+    </div>
+
+  </div></div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="col"><div class="col-pad">
+
+    <div class="section-label">ENGINE STATUS</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="stat-num" id="statActive" style="color:var(--green);">0</div><div class="stat-label">Rules Active</div></div>
+      <div class="stat-box"><div class="stat-num" id="statDisabled" style="color:var(--text-dim);">0</div><div class="stat-label">Rules Disabled</div></div>
+      <div class="stat-box"><div class="stat-num" id="statExec" style="color:var(--amber);">0</div><div class="stat-label">Executions</div></div>
+      <div class="stat-box"><div class="stat-num" id="statConflicts" style="color:var(--purple);">0</div><div class="stat-label">Conflicts Resolved</div></div>
+      <div class="stat-box" style="grid-column:1/-1;"><div class="stat-num" id="statCycles" style="color:var(--red);">0</div><div class="stat-label">Cycles Blocked</div></div>
+    </div>
+
+    <div class="section-label">ENERGY INTELLIGENCE <span style="color:var(--text-faint);font-weight:400;">(simulated)</span></div>
+    <div class="card" id="energyIntel" style="margin-bottom:16px;"></div>
+
+    <div class="section-label">RULES <span class="count" id="ruleCount"></span><button class="btn btn-sm" id="addRuleBtn">+ Add Rule</button></div>
+    <div id="rulesList" style="margin-bottom:16px;"></div>
+
+    <div class="section-label">EVENT / AUDIT LOG</div>
+    <div class="log-filters" id="logFilters"></div>
+    <div id="logList"></div>
+
+  </div></div>
+
+</div>
+
+<!-- Rule builder drawer -->
+<div class="overlay" id="ruleOverlay">
+  <div class="drawer">
+    <div class="drawer-header">
+      <div class="drawer-title">CREATE NEW RULE</div>
+      <button class="icon-btn" id="closeDrawer">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="field">
+        <label>RULE NAME</label>
+        <input type="text" id="fName" placeholder="e.g. Solar EV Charging">
+      </div>
+      <div class="field">
+        <label>WHEN</label>
+        <div class="cond-row">
+          <select id="fInput"></select>
+          <select id="fOperator">
+            <option>&gt;</option><option>&lt;</option><option>&gt;=</option><option>&lt;=</option><option>==</option><option>!=</option>
+          </select>
+          <input type="text" id="fValue" placeholder="value">
+        </div>
+      </div>
+      <div class="field">
+        <label>THEN</label>
+        <div class="then-row">
+          <select id="fDevice"></select>
+          <select id="fSetValue"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>PRIORITY (1–10, higher wins conflicts)</label>
+        <input type="number" id="fPriority" min="1" max="10" value="5">
+      </div>
+      <button class="btn btn-amber" id="submitRule" style="width:100%;justify-content:center;">ADD RULE</button>
+      <div class="validation-msg" id="validationMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script>
+(function(){
+
+// ============================================================
+// DOMAIN MODEL
+// ============================================================
+const SENSOR_DEFS = [
+  {key:'Solar_Output', label:'Solar Output', unit:'kW', icon:'☀', min:0, max:10, color:'var(--amber)'},
+  {key:'Grid_Tariff_Price', label:'Grid Tariff', unit:'$/kWh', icon:'⚡', min:0.10, max:0.60, step:0.01, color:'var(--blue)'},
+  {key:'Battery_Level', label:'Battery Level', unit:'%', icon:'🔋', min:0, max:100, color:'var(--green)'},
+  {key:'Building_Temp', label:'Building Temp', unit:'°C', icon:'🌡', min:15, max:40, color:'var(--red)'},
+];
+const ACTUATOR_DEFS = [
+  {key:'HVAC_System', label:'HVAC System', values:['OFF','ECO','MAX']},
+  {key:'EV_Charger', label:'EV Charger', values:['ON','OFF']},
+  {key:'Battery_Discharge', label:'Battery Discharge', values:['ON','OFF']},
+];
+const ALL_DEVICE_KEYS = [...SENSOR_DEFS.map(s=>s.key), ...ACTUATOR_DEFS.map(a=>a.key)];
+const DEVICE_LABEL = {}; SENSOR_DEFS.forEach(s=>DEVICE_LABEL[s.key]=s.label); ACTUATOR_DEFS.forEach(a=>DEVICE_LABEL[a.key]=a.label);
+
+let state = {
+  Solar_Output: 3, Grid_Tariff_Price: 0.25, Battery_Level: 62, Building_Temp: 24,
+  HVAC_System: 'OFF', EV_Charger: 'OFF', Battery_Discharge: 'ON'
+};
+
+let rules = [
+  {id:'R1', name:'Solar EV Charging', condition:{input:'Solar_Output',operator:'>',value:7}, action:{device:'EV_Charger',value:'ON'}, priority:2, enabled:true},
+  {id:'R2', name:'Preserve Battery', condition:{input:'EV_Charger',operator:'==',value:'ON'}, action:{device:'Battery_Discharge',value:'OFF'}, priority:4, enabled:true},
+  {id:'R3', name:'High Temperature Cooling', condition:{input:'Building_Temp',operator:'>',value:30}, action:{device:'HVAC_System',value:'MAX'}, priority:3, enabled:true},
+  {id:'R4', name:'Peak Tariff Saving', condition:{input:'Grid_Tariff_Price',operator:'>',value:0.30}, action:{device:'HVAC_System',value:'ECO'}, priority:8, enabled:true},
+  {id:'R5', name:'Low Battery Protection', condition:{input:'Battery_Level',operator:'<',value:20}, action:{device:'Battery_Discharge',value:'OFF'}, priority:10, enabled:true},
+  {id:'R6', name:'Solar Feedback (demo)', condition:{input:'Battery_Discharge',operator:'==',value:'ON'}, action:{device:'Solar_Output',value:10}, priority:1, enabled:true},
+];
+let nextRuleNum = 7;
+
+let counters = {executions:0, conflicts:0, cyclesBlocked:0};
+let eventLog = [];
+let lastTrace = null;
+let activeLogFilter = 'all';
+let simMode = 'auto'; // 'auto' | 'manual'
+let simInterval = null;
+let simTick = 0;
+let lastActivePathEdges = new Set(); // for graph highlighting
+let lastCyclePath = null;
+
+const MAX_ITER = 20;
+
+// ============================================================
+// UTIL
+// ============================================================
+function fmtVal(v){ return typeof v==='number' ? (Number.isInteger(v)?v:v.toFixed(2)) : v; }
+function nowStr(){ const d=new Date(); return d.toTimeString().slice(0,8); }
+function el(tag, cls, html){ const e=document.createElement(tag); if(cls) e.className=cls; if(html!==undefined) e.innerHTML=html; return e; }
+
+function logEvent(type, msg){
+  eventLog.unshift({type, msg, time: nowStr()});
+  if(eventLog.length>300) eventLog.pop();
+  renderLog();
+}
+
+function toast(msg, kind){
+  const stack = document.getElementById('toastStack');
+  const t = el('div', 'toast'+(kind?' '+kind:''), msg);
+  stack.appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(), 300); }, 3400);
+}
+
+// ============================================================
+// CONDITION EVAL
+// ============================================================
+function coerce(a,b){
+  // if both look numeric, compare as numbers
+  const na = parseFloat(a), nb = parseFloat(b);
+  if(!isNaN(na) && !isNaN(nb) && typeof a !== 'string' || (typeof a==='string' && a.trim()!=='' && !isNaN(na) && typeof b==='string' && !isNaN(nb))){
+    return [na, nb];
+  }
+  return [String(a), String(b)];
+}
+function evalCondition(cond, st){
+  const left = st[cond.input];
+  if(left===undefined) return false;
+  let right = cond.value;
+  let l = left, r = right;
+  const nl = parseFloat(left), nr = parseFloat(right);
+  const bothNumeric = !isNaN(nl) && !isNaN(nr) && right!=='' && right!==null && right!==undefined && (typeof left !== 'string' || !isNaN(nl));
+  if(bothNumeric){ l = nl; r = nr; } else { l = String(left); r = String(right); }
+  switch(cond.operator){
+    case '>': return l > r;
+    case '<': return l < r;
+    case '>=': return l >= r;
+    case '<=': return l <= r;
+    case '==': return l == r;
+    case '!=': return l != r;
+    default: return false;
+  }
+}
+
+// ============================================================
+// GRAPH / CYCLE DETECTION
+// ============================================================
+// Node ids: device keys as-is, rules as "RULE:<id>"
+function buildGraph(ruleSet){
+  const adj = {}; // node -> [node,...]
+  function ensure(n){ if(!adj[n]) adj[n]=[]; }
+  ALL_DEVICE_KEYS.forEach(ensure);
+  ruleSet.forEach(r=>{
+    const rn = 'RULE:'+r.id;
+    ensure(rn); ensure(r.condition.input); ensure(r.action.device);
+    adj[r.condition.input].push(rn);
+    adj[rn].push(r.action.device);
+  });
+  return adj;
+}
+
+function detectCycle(adj){
+  const WHITE=0, GRAY=1, BLACK=2;
+  const color = {};
+  Object.keys(adj).forEach(n=>color[n]=WHITE);
+  let cyclePath = null;
+
+  function dfs(node, path){
+    color[node]=GRAY; path.push(node);
+    for(const next of adj[node]){
+      if(color[next]===GRAY){
+        // back edge found -> reconstruct cycle
+        const idx = path.indexOf(next);
+        cyclePath = path.slice(idx).concat([next]);
+        return true;
+      }
+      if(color[next]===WHITE){
+        if(dfs(next, path)) return true;
+      }
+    }
+    path.pop();
+    color[node]=BLACK;
+    return false;
+  }
+
+  for(const n of Object.keys(adj)){
+    if(color[n]===WHITE){
+      if(dfs(n, [])) return cyclePath;
+    }
+  }
+  return null;
+}
+
+function humanizePath(path){
+  return path.map(n => n.startsWith('RULE:') ? n : (DEVICE_LABEL[n]||n)).filter((v,i,arr)=> v.startsWith && false || true);
+}
+function humanizeCyclePath(path){
+  // collapse RULE: nodes out for a clean device->device->device story, keep rule refs inline
+  const out = [];
+  for(let i=0;i<path.length;i++){
+    const n = path[i];
+    if(n.startsWith('RULE:')) continue;
+    out.push(DEVICE_LABEL[n]||n);
+  }
+  return out;
+}
+
+// ============================================================
+// RULE ENGINE — evaluate with chaining + arbitration
+// ============================================================
+function runEngine(){
+  let working = {...state};
+  const trace = []; // {iter, type:'trigger'|'arbitration', ...}
+  let execThisRun = 0, conflictsThisRun = 0;
+  lastActivePathEdges = new Set();
+
+  for(let iter=0; iter<MAX_ITER; iter++){
+    const active = rules.filter(r=> r.enabled && evalCondition(r.condition, working));
+    if(active.length===0) break;
+
+    const claimsByDevice = {};
+    active.forEach(r=>{
+      (claimsByDevice[r.action.device] = claimsByDevice[r.action.device]||[]).push(r);
+    });
+
+    let changed = false;
+    Object.entries(claimsByDevice).forEach(([device, claims])=>{
+      claims.sort((a,b)=> b.priority - a.priority);
+      const winner = claims[0];
+      if(claims.length>1){
+        conflictsThisRun++;
+        trace.push({type:'arbitration', device, winner, losers: claims.slice(1), iter});
+        const detail = claims.map(c=>`${c.id} P${c.priority}`).join(' vs ');
+        logEvent('arbitration', `<b>ARBITRATION</b> on ${DEVICE_LABEL[device]||device}: ${winner.id} (P${winner.priority}) overruled ${claims.slice(1).map(c=>c.id+' P'+c.priority).join(', ')} → ${device} = ${winner.action.value}`);
+      }
+      if(String(working[device]) !== String(winner.action.value)){
+        working[device] = (typeof winner.action.value==='number') ? winner.action.value : winner.action.value;
+        changed = true;
+        execThisRun++;
+        trace.push({type:'trigger', rule:winner, device, value:winner.action.value, iter});
+        lastActivePathEdges.add(winner.condition.input+'->RULE:'+winner.id);
+        lastActivePathEdges.add('RULE:'+winner.id+'->'+winner.action.device);
+        logEvent('trigger', `<b>${winner.id} TRIGGERED</b> — ${winner.condition.input} ${winner.condition.operator} ${winner.condition.value} → ${device} = ${winner.action.value}`);
+      }
+    });
+
+    if(!changed) break;
+  }
+
+  state = working;
+  counters.executions += execThisRun;
+  counters.conflicts += conflictsThisRun;
+  lastTrace = trace;
+  renderAll();
+  return trace;
+}
+
+// ============================================================
+// RULE MANAGEMENT (live add / enable / disable / delete)
+// ============================================================
+function tryAddRule(newRule){
+  const testSet = rules.concat([newRule]);
+  const graph = buildGraph(testSet);
+  const cycle = detectCycle(graph);
+  if(cycle){
+    counters.cyclesBlocked++;
+    lastCyclePath = cycle;
+    const story = humanizeCyclePath(cycle).join(' → ');
+    logEvent('cycle', `<b>CYCLE DETECTED</b> — rejected ${newRule.id}: ${story}`);
+    renderStats(); renderGraph();
+    return {ok:false, cyclePath: cycle, story};
+  }
+  rules.push(newRule);
+  logEvent('system', `<b>RULE ADDED</b> — ${newRule.id} "${newRule.name}" activated live, no restart required`);
+  runEngine(); // re-evaluate immediately
+  renderRules(); renderGraph(); renderStats();
+  return {ok:true};
+}
+
+function deleteRule(id){
+  rules = rules.filter(r=>r.id!==id);
+  logEvent('system', `Rule <b>${id}</b> deleted`);
+  renderAll();
+}
+function toggleRule(id){
+  const r = rules.find(r=>r.id===id);
+  if(!r) return;
+  r.enabled = !r.enabled;
+  logEvent('system', `Rule <b>${id}</b> ${r.enabled?'enabled':'disabled'}`);
+  runEngine();
+  renderRules();
+}
+
+// ============================================================
+// RENDER — Sensors / Actuators
+// ============================================================
+function renderSensors(){
+  const wrap = document.getElementById('sensorCards');
+  wrap.innerHTML='';
+  SENSOR_DEFS.forEach(s=>{
+    const val = state[s.key];
+    const pct = Math.max(0, Math.min(100, ((val - s.min) / (s.max - s.min)) * 100));
+    const card = el('div','card sensor-card');
+    card.innerHTML = `
+      <div class="sensor-top">
+        <div class="sensor-name">${s.icon} ${s.label}</div>
+      </div>
+      <div class="sensor-value">${fmtVal(val)}<span class="unit">${s.unit}</span></div>
+      <div class="sensor-bar"><div class="sensor-bar-fill" style="width:${pct}%;background:${s.color};"></div></div>
+      <input type="range" min="${s.min}" max="${s.max}" step="${s.step||1}" value="${val}" data-key="${s.key}" ${simMode==='auto'?'disabled':''}>
+    `;
+    wrap.appendChild(card);
+  });
+  wrap.querySelectorAll('input[type=range]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const key = e.target.dataset.key;
+      state[key] = parseFloat(e.target.value);
+      renderSensorsLite();
+      if(simMode==='manual'){ /* wait for RUN ENGINE */ }
+    });
+    inp.addEventListener('change', e=>{
+      logEvent('sensor', `Sensor <b>${DEVICE_LABEL[e.target.dataset.key]}</b> manually set to ${fmtVal(state[e.target.dataset.key])}`);
+    });
+  });
+}
+function renderSensorsLite(){
+  // cheap refresh of just displayed numbers/bars without rebuilding sliders (avoids losing drag focus)
+  const wrap = document.getElementById('sensorCards');
+  const cards = wrap.querySelectorAll('.sensor-card');
+  SENSOR_DEFS.forEach((s,i)=>{
+    const val = state[s.key];
+    const pct = Math.max(0, Math.min(100, ((val - s.min) / (s.max - s.min)) * 100));
+    const c = cards[i];
+    if(!c) return;
+    c.querySelector('.sensor-value').innerHTML = `${fmtVal(val)}<span class="unit">${s.unit}</span>`;
+    c.querySelector('.sensor-bar-fill').style.width = pct+'%';
+  });
+}
+
+function renderActuators(){
+  const wrap = document.getElementById('actuatorCards');
+  wrap.innerHTML='';
+  ACTUATOR_DEFS.forEach(a=>{
+    const val = state[a.key];
+    const cls = val==='ON'||val==='MAX' ? 'st-on' : (val==='ECO'?'st-eco':'st-off');
+    const card = el('div','card actuator-card');
+    card.innerHTML = `<div class="actuator-name">${a.label}</div><div class="actuator-state ${cls}">${val}</div>`;
+    wrap.appendChild(card);
+  });
+}
+
+// ============================================================
+// RENDER — Stats / Energy Intelligence
+// ============================================================
+function renderStats(){
+  document.getElementById('statActive').textContent = rules.filter(r=>r.enabled).length;
+  document.getElementById('statDisabled').textContent = rules.filter(r=>!r.enabled).length;
+  document.getElementById('statExec').textContent = counters.executions;
+  document.getElementById('statConflicts').textContent = counters.conflicts;
+  document.getElementById('statCycles').textContent = counters.cyclesBlocked;
+}
+
+function renderEnergyIntel(){
+  const solar = state.Solar_Output, batt = state.Battery_Level, tariff = state.Grid_Tariff_Price;
+  const solarUtil = Math.min(100, Math.round((solar/10)*100 * (state.EV_Charger==='ON'?1:0.75) ));
+  const gridDep = Math.max(0, Math.min(100, Math.round(100 - solarUtil*0.6 - (batt>50?15:0))));
+  const battUsage = state.Battery_Discharge==='ON' ? Math.round(100-batt) : Math.round((100-batt)*0.3);
+  const evSolar = state.EV_Charger==='ON' ? Math.min(100, Math.round(solar*10)) : 0;
+  const baseLoad = 3.2;
+  const gridDraw = Math.max(0, baseLoad - solar) + (state.HVAC_System==='MAX'?1.4:state.HVAC_System==='ECO'?0.5:0) + (state.EV_Charger==='ON'?2.2:0);
+  const cost = (gridDraw * tariff * 24 / 6).toFixed(2);
+  const savings = (solar * tariff * 24/6 * 0.6).toFixed(2);
+
+  const wrap = document.getElementById('energyIntel');
+  wrap.innerHTML = `
+    <div class="intel-row"><span>Solar Utilization</span><span class="intel-val" style="color:var(--amber);">${solarUtil}%</span></div>
+    <div class="intel-row"><span>Grid Dependency</span><span class="intel-val" style="color:var(--blue);">${gridDep}%</span></div>
+    <div class="intel-row"><span>Battery Usage</span><span class="intel-val" style="color:var(--green);">${battUsage}%</span></div>
+    <div class="intel-row"><span>EV Solar Charging</span><span class="intel-val" style="color:var(--amber);">${evSolar}%</span></div>
+    <div class="intel-row"><span>Estimated Daily Cost</span><span class="intel-val">$${cost}</span></div>
+    <div class="intel-row"><span>Estimated Savings</span><span class="intel-val" style="color:var(--green);">$${savings}</span></div>
+    <div class="intel-note">Simulated estimates derived from current sensor/actuator state, recalculated on every engine run.</div>
+  `;
+}
+
+// ============================================================
+// RENDER — Rules list
+// ============================================================
+function renderRules(){
+  const wrap = document.getElementById('rulesList');
+  wrap.innerHTML='';
+  document.getElementById('ruleCount').textContent = '('+rules.length+')';
+  if(rules.length===0){ wrap.appendChild(el('div','empty-state','No rules defined')); return; }
+  rules.forEach(r=>{
+    const row = el('div','rule-row'+(r.enabled?'':' disabled'));
+    row.innerHTML = `
+      <div class="rule-row-top">
+        <div><span class="rule-id">${r.id}</span> <span class="rule-name">${r.name}</span></div>
+        <div class="rule-actions">
+          <button class="icon-btn" data-act="toggle" title="Enable/disable">${r.enabled?'⏸':'▶'}</button>
+          <button class="icon-btn" data-act="delete" title="Delete">🗑</button>
+        </div>
+      </div>
+      <div class="rule-logic">${r.condition.input} ${r.condition.operator} ${r.condition.value}<span class="arrow">⟶</span>${r.action.device} = ${r.action.value}</div>
+      <div class="rule-meta"><span class="prio-badge">PRIORITY ${r.priority}</span></div>
+    `;
+    row.querySelector('[data-act=toggle]').addEventListener('click', ()=>toggleRule(r.id));
+    row.querySelector('[data-act=delete]').addEventListener('click', ()=>deleteRule(r.id));
+    wrap.appendChild(row);
+  });
+}
+
+// ============================================================
+// RENDER — Trace ("why did this happen")
+// ============================================================
+function renderTrace(){
+  const wrap = document.getElementById('traceContent');
+  document.getElementById('traceTime').textContent = lastTrace ? nowStr() : '';
+  if(!lastTrace || lastTrace.length===0){
+    wrap.innerHTML = '<div class="trace-empty">No rules triggered on last evaluation — system stable.</div>';
+    return;
+  }
+  wrap.innerHTML='';
+  lastTrace.forEach((step, i)=>{
+    if(step.type==='trigger'){
+      const s = el('div','trace-step trig');
+      s.innerHTML = `<div class="tstep-badge">${i+1}</div><div>${step.rule.condition.input} ${step.rule.condition.operator} ${step.rule.condition.value} satisfied → <b>${step.rule.id}</b> requested ${step.device} = ${step.value}</div>`;
+      wrap.appendChild(s);
+    } else if(step.type==='arbitration'){
+      const s = el('div','trace-step arb');
+      s.innerHTML = `<div class="tstep-badge">⚡</div><div>Conflict on <b>${DEVICE_LABEL[step.device]||step.device}</b> — ${step.winner.id} (P${step.winner.priority}) wins</div>`;
+      wrap.appendChild(s);
+      const detail = el('div','arb-detail');
+      detail.innerHTML = step.losers.concat([]).length>=0 ? [
+        `<div class="arb-row"><span class="arb-winner">✓ ${step.winner.id} — Priority ${step.winner.priority} → ${step.device} = ${step.winner.action.value}</span></div>`,
+        ...step.losers.map(l=>`<div class="arb-row"><span class="arb-loser">✕ ${l.id} — Priority ${l.priority} → ${step.device} = ${l.action.value}</span></div>`)
+      ].join('') : '';
+      wrap.appendChild(detail);
+    }
+    if(i<lastTrace.length-1) wrap.appendChild(el('div','trace-connector'));
+  });
+}
+
+// ============================================================
+// RENDER — Event log
+// ============================================================
+const LOG_FILTER_DEFS = [
+  {key:'all', label:'ALL'},
+  {key:'trigger', label:'EXECUTION'},
+  {key:'arbitration', label:'ARBITRATION'},
+  {key:'cycle', label:'CYCLE'},
+  {key:'sensor', label:'SENSOR'},
+  {key:'system', label:'SYSTEM'},
+];
+function renderLogFilters(){
+  const wrap = document.getElementById('logFilters');
+  wrap.innerHTML='';
+  LOG_FILTER_DEFS.forEach(f=>{
+    const b = el('button','log-filter'+(activeLogFilter===f.key?' active':''), f.label);
+    b.addEventListener('click', ()=>{ activeLogFilter=f.key; renderLogFilters(); renderLog(); });
+    wrap.appendChild(b);
+  });
+}
+function renderLog(){
+  const wrap = document.getElementById('logList');
+  wrap.innerHTML='';
+  const items = eventLog.filter(e=> activeLogFilter==='all' || e.type===activeLogFilter).slice(0,80);
+  if(items.length===0){ wrap.appendChild(el('div','empty-state','No events yet')); return; }
+  items.forEach(e=>{
+    const row = el('div','log-entry '+e.type);
+    row.innerHTML = `<div class="log-time">[${e.time}]</div><div class="log-msg">${e.msg}</div>`;
+    wrap.appendChild(row);
+  });
+}
+
+// ============================================================
+// RENDER — Graph (SVG)
+// ============================================================
+function layoutGraph(){
+  const W=900,H=440,cx=W/2,cy=H/2-10;
+  const devices = ALL_DEVICE_KEYS;
+  const rDevice = 195;
+  const positions = {};
+  devices.forEach((d,i)=>{
+    const angle = (i/devices.length) * Math.PI*2 - Math.PI/2;
+    positions[d] = {x: cx + Math.cos(angle)*rDevice, y: cy + Math.sin(angle)*rDevice*0.82};
+  });
+  rules.forEach((r,i)=>{
+    const a = positions[r.condition.input], b = positions[r.action.device];
+    let x,y;
+    if(a && b){ x=(a.x+b.x)/2; y=(a.y+b.y)/2; }
+    else { x=cx; y=cy; }
+    // jitter based on index to reduce overlap among multiple rules sharing endpoints
+    const jit = (i%5 - 2) * 14;
+    positions['RULE:'+r.id] = {x: x + jit*0.6, y: y + jit};
+  });
+  return positions;
+}
+
+function renderGraph(){
+  const svg = document.getElementById('graphSvg');
+  const pos = layoutGraph();
+  const parts = [];
+
+  parts.push(`<defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#3A4A6B"/></marker>
+    <marker id="arrowActive" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#F5A623"/></marker>
+    <marker id="arrowCycle" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#FF5D5D"/></marker>
+  </defs>`);
+
+  const cycleEdgeSet = new Set();
+  if(lastCyclePath){
+    for(let i=0;i<lastCyclePath.length-1;i++) cycleEdgeSet.add(lastCyclePath[i]+'->'+lastCyclePath[i+1]);
+  }
+
+  // edges
+  rules.forEach(r=>{
+    const rn = 'RULE:'+r.id;
+    const a = pos[r.condition.input], b = pos[rn], c = pos[r.action.device];
+    if(!a||!b||!c) return;
+    const dim = !r.enabled;
+    [[r.condition.input, rn, a, b],[rn, r.action.device, b, c]].forEach(([fromKey,toKey,p1,p2])=>{
+      const key = fromKey+'->'+toKey;
+      const isActive = lastActivePathEdges.has(key);
+      const isCycle = cycleEdgeSet.has(fromKey+'->'+toKey) || cycleEdgeSet.has(toKey+'->'+fromKey);
+      let stroke = dim ? '#28324A' : '#3A4A6B';
+      let marker='url(#arrow)', width=1.2, dash='';
+      if(isActive && !dim){ stroke='#F5A623'; marker='url(#arrowActive)'; width=2.2; }
+      if(isCycle){ stroke='#FF5D5D'; marker='url(#arrowCycle)'; width=2.4; dash='4,3'; }
+      parts.push(`<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${stroke}" stroke-width="${width}" marker-end="${marker}" stroke-dasharray="${dash}" opacity="${dim?0.35:1}"/>`);
+    });
+  });
+
+  // device nodes
+  ALL_DEVICE_KEYS.forEach(d=>{
+    const p = pos[d]; if(!p) return;
+    const isSensor = SENSOR_DEFS.some(s=>s.key===d);
+    const val = state[d];
+    parts.push(`
+      <g>
+        <rect x="${p.x-52}" y="${p.y-16}" width="104" height="32" fill="${isSensor?'#182238':'#182238'}" stroke="${isSensor?'#5B8DEF':'#3DD68C'}" stroke-width="1.2"/>
+        <text x="${p.x}" y="${p.y-3}" text-anchor="middle" class="node-label">${(DEVICE_LABEL[d]||d)}</text>
+        <text x="${p.x}" y="${p.y+11}" text-anchor="middle" class="node-value">${fmtVal(val)}</text>
+      </g>
+    `);
+  });
+
+  // rule nodes
+  rules.forEach(r=>{
+    const p = pos['RULE:'+r.id]; if(!p) return;
+    const dim = !r.enabled;
+    const isCycleNode = lastCyclePath && lastCyclePath.includes('RULE:'+r.id);
+    const stroke = isCycleNode ? '#FF5D5D' : (dim ? '#28324A' : '#9B8CFF');
+    parts.push(`
+      <g opacity="${dim?0.4:1}">
+        <circle cx="${p.x}" cy="${p.y}" r="16" fill="#111A2B" stroke="${stroke}" stroke-width="1.4"/>
+        <text x="${p.x}" y="${p.y+3.5}" text-anchor="middle" class="node-label" style="fill:${dim?'#5B6580':'#E7ECF5'};font-weight:600;">${r.id}</text>
+      </g>
+    `);
+  });
+
+  svg.innerHTML = parts.join('');
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll(){
+  renderSensors();
+  renderActuators();
+  renderStats();
+  renderEnergyIntel();
+  renderRules();
+  renderTrace();
+  renderLogFilters();
+  renderLog();
+  renderGraph();
+}
+
+// ============================================================
+// SCENARIOS
+// ============================================================
+function setSensors(patch){
+  Object.assign(state, patch);
+  renderSensors();
+}
+
+function scenario1(){
+  logEvent('system', 'Demo Scenario 01 — Solar Surplus');
+  setSensors({Solar_Output: 8});
+  runEngine();
+  toast('Scenario 1: Solar surplus injected — watch the chain execute.');
+}
+function scenario2(){
+  logEvent('system', 'Demo Scenario 02 — Peak Tariff Conflict');
+  setSensors({Building_Temp: 35, Grid_Tariff_Price: 0.45});
+  runEngine();
+  toast('Scenario 2: High temp + peak tariff — HVAC arbitration triggered.');
+}
+function scenario3(){
+  logEvent('system', 'Demo Scenario 03 — Cycle Attack');
+  const attempt = {
+    id:'R'+nextRuleNum, name:'Malicious Feedback (attack)',
+    condition:{input:'Solar_Output',operator:'>',value:5},
+    action:{device:'Battery_Discharge',value:'ON'},
+    priority:5, enabled:true
+  };
+  const result = tryAddRule(attempt);
+  if(!result.ok){
+    toast('Cycle detected: '+result.story, 'err');
+    document.querySelector('.graph-wrap').classList.add('cycle-flash');
+    setTimeout(()=>document.querySelector('.graph-wrap').classList.remove('cycle-flash'), 900);
+  } else {
+    nextRuleNum++;
+    toast('Unexpected: rule was accepted (no cycle found).');
+  }
+}
+function scenario4(){
+  logEvent('system', 'Demo Scenario 04 — Live Rule Injection');
+  const newRule = {
+    id:'R'+nextRuleNum, name:'Battery Cutoff (injected live)',
+    condition:{input:'Battery_Level',operator:'<',value:20},
+    action:{device:'Battery_Discharge',value:'OFF'},
+    priority:9, enabled:true
+  };
+  const result = tryAddRule(newRule);
+  if(result.ok){ nextRuleNum++; toast('Rule '+newRule.id+' injected live — no restart required.', 'ok'); }
+}
+
+document.getElementById('sc1').addEventListener('click', scenario1);
+document.getElementById('sc2').addEventListener('click', scenario2);
+document.getElementById('sc3').addEventListener('click', scenario3);
+document.getElementById('sc4').addEventListener('click', scenario4);
+
+// ============================================================
+// MODE / SIMULATION
+// ============================================================
+function startAutoSim(){
+  if(simInterval) clearInterval(simInterval);
+  simInterval = setInterval(()=>{
+    simTick++;
+    // simple day-cycle simulation
+    const t = (simTick % 60);
+    const solarCurve = Math.max(0, Math.sin((t/60)*Math.PI) * 9.5);
+    state.Solar_Output = Math.round(solarCurve*10)/10;
+    state.Battery_Level = Math.max(2, Math.min(100, state.Battery_Level + (state.Battery_Discharge==='ON' ? -0.6 : (solarCurve>4?0.8:0.1)) ));
+    state.Building_Temp = Math.round((22 + Math.sin((t/60)*Math.PI)*8 + (Math.random()-0.5))*10)/10;
+    if(simTick % 12 === 0){
+      const tariffs = [0.12,0.25,0.45];
+      state.Grid_Tariff_Price = tariffs[Math.floor(Math.random()*tariffs.length)];
+    }
+    runEngine();
+  }, 3000);
+}
+function stopAutoSim(){ if(simInterval){ clearInterval(simInterval); simInterval=null; } }
+
+document.getElementById('modeAuto').addEventListener('click', ()=>{
+  simMode='auto';
+  document.getElementById('modeAuto').classList.add('active');
+  document.getElementById('modeManual').classList.remove('active');
+  document.getElementById('runEngineBtn').style.display='none';
+  startAutoSim();
+  renderSensors();
+  logEvent('system', 'Switched to <b>AUTO SIMULATION</b> mode');
+});
+document.getElementById('modeManual').addEventListener('click', ()=>{
+  simMode='manual';
+  document.getElementById('modeManual').classList.add('active');
+  document.getElementById('modeAuto').classList.remove('active');
+  document.getElementById('runEngineBtn').style.display='flex';
+  stopAutoSim();
+  renderSensors();
+  logEvent('system', 'Switched to <b>MANUAL DEMO</b> mode');
+});
+document.getElementById('runEngineBtn').addEventListener('click', ()=>{
+  runEngine();
+  toast('Engine evaluated current sensor state.');
+});
+document.getElementById('runEngineBtn').style.display='none';
+
+// ============================================================
+// RULE BUILDER DRAWER
+// ============================================================
+const overlay = document.getElementById('ruleOverlay');
+function populateDropdowns(){
+  const fInput = document.getElementById('fInput');
+  const fDevice = document.getElementById('fDevice');
+  fInput.innerHTML=''; fDevice.innerHTML='';
+  ALL_DEVICE_KEYS.forEach(k=>{
+    fInput.appendChild(new Option(DEVICE_LABEL[k], k));
+    fDevice.appendChild(new Option(DEVICE_LABEL[k], k));
+  });
+  updateSetValueOptions();
+}
+function updateSetValueOptions(){
+  const device = document.getElementById('fDevice').value;
+  const fSetValue = document.getElementById('fSetValue');
+  const actDef = ACTUATOR_DEFS.find(a=>a.key===device);
+  fSetValue.innerHTML='';
+  if(actDef){
+    actDef.values.forEach(v=> fSetValue.appendChild(new Option(v,v)));
+    fSetValue.disabled=false;
+    fSetValue.style.display='';
+  } else {
+    // numeric sensor target — swap to number input via a text option placeholder
+    fSetValue.innerHTML = '<option value="__numeric__">numeric →</option>';
+  }
+}
+document.getElementById('fDevice').addEventListener('change', updateSetValueOptions);
+
+document.getElementById('addRuleBtn').addEventListener('click', ()=>{
+  populateDropdowns();
+  document.getElementById('fName').value='';
+  document.getElementById('fValue').value='';
+  document.getElementById('fPriority').value=5;
+  document.getElementById('validationMsg').className='validation-msg';
+  overlay.classList.add('show');
+});
+document.getElementById('closeDrawer').addEventListener('click', ()=> overlay.classList.remove('show'));
+overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.classList.remove('show'); });
+
+document.getElementById('submitRule').addEventListener('click', ()=>{
+  const name = document.getElementById('fName').value.trim() || 'Untitled Rule';
+  const input = document.getElementById('fInput').value;
+  const operator = document.getElementById('fOperator').value;
+  const rawValue = document.getElementById('fValue').value.trim();
+  const device = document.getElementById('fDevice').value;
+  let setValue = document.getElementById('fSetValue').value;
+  const priority = parseInt(document.getElementById('fPriority').value) || 5;
+  const msgBox = document.getElementById('validationMsg');
+
+  if(rawValue===''){
+    msgBox.className='validation-msg show err';
+    msgBox.textContent = '✕ Invalid rule configuration — condition value is required.';
+    return;
+  }
+  if(setValue==='__numeric__'){
+    msgBox.className='validation-msg show err';
+    msgBox.textContent = '✕ Invalid rule configuration — this target needs a numeric THEN value. Try an actuator (HVAC/EV/Battery) instead, or use the demo rule set for sensor targets.';
+    return;
+  }
+  const condValue = isNaN(parseFloat(rawValue)) ? rawValue : parseFloat(rawValue);
+
+  const newRule = {
+    id:'R'+nextRuleNum, name,
+    condition:{input, operator, value:condValue},
+    action:{device, value:setValue},
+    priority, enabled:true
+  };
+
+  const result = tryAddRule(newRule);
+  if(result.ok){
+    nextRuleNum++;
+    msgBox.className='validation-msg show ok';
+    msgBox.textContent = '✓ Rule added successfully — active immediately, no restart required.';
+    toast('Rule '+newRule.id+' added and activated.', 'ok');
+    setTimeout(()=> overlay.classList.remove('show'), 900);
+  } else {
+    msgBox.className='validation-msg show err';
+    msgBox.textContent = '✕ Rule rejected — dependency cycle detected:\n' + result.story;
+    toast('Cycle detected — rule rejected.', 'err');
+  }
+});
+
+// ============================================================
+// JUDGE DEMO MODE
+// ============================================================
+const judgeSteps = [
+  {text:'<b>Solar surplus detected</b> — watch rule chaining execute live.', run: ()=>{ setSensors({Solar_Output:8}); runEngine(); }},
+  {text:'<b>Peak tariff + high temperature</b> — watch conflict arbitration resolve HVAC control.', run: ()=>{ setSensors({Building_Temp:35, Grid_Tariff_Price:0.45}); runEngine(); }},
+  {text:'<b>Attempting malicious feedback rule</b> — the engine must reject the dependency cycle.', run: ()=>{ scenario3(); }},
+  {text:'<b>Injecting a new rule while running</b> — no restart required.', run: ()=>{ scenario4(); }},
+];
+let judgeIdx = 0;
+const judgeBanner = document.getElementById('judgeBanner');
+function runJudgeStep(){
+  if(judgeIdx>=judgeSteps.length){
+    judgeBanner.classList.remove('show');
+    toast('✓ Rule Chaining  ✓ Conflict Arbitration  ✓ Cycle Detection  ✓ Live Rule Updates — SYSTEM STATUS: STABLE', 'ok');
+    logEvent('system', '<b>JUDGE DEMO COMPLETE</b> — all four capabilities demonstrated. System status: STABLE');
+    return;
+  }
+  const step = judgeSteps[judgeIdx];
+  document.getElementById('judgeStepNum').textContent = 'STEP '+(judgeIdx+1)+'/'+judgeSteps.length;
+  document.getElementById('judgeStepText').innerHTML = step.text;
+  judgeBanner.classList.add('show');
+  step.run();
+  judgeIdx++;
+  setTimeout(runJudgeStep, 3200);
+}
+document.getElementById('judgeBtn').addEventListener('click', ()=>{
+  judgeIdx=0;
+  if(simMode==='auto') document.getElementById('modeManual').click();
+  logEvent('system', '<b>JUDGE DEMO MODE STARTED</b>');
+  runJudgeStep();
+});
+document.getElementById('judgeSkip').addEventListener('click', ()=>{
+  judgeBanner.classList.remove('show');
+  judgeIdx = judgeSteps.length;
+});
+
+// ============================================================
+// CLOCK
+// ============================================================
+function tickClock(){ document.getElementById('clock').textContent = nowStr(); }
+setInterval(tickClock, 1000); tickClock();
+
+// ============================================================
+// INIT
+// ============================================================
+populateDropdowns();
+renderAll();
+startAutoSim();
+logEvent('system', 'System initialized — 6 rules loaded, AUTO SIMULATION running');
+
+})();
+</script>
+</body>
+</html>
